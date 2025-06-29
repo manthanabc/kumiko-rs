@@ -71,29 +71,6 @@ impl Panel {
         let is_width_small = panel_width_f64 < threshold_width;
         let is_height_small = panel_height_f64 < threshold_height;
 
-        // Debug prints
-        println!(
-            "Panel: x={}, y={}, w={}, h={}",
-            self.x,
-            self.y,
-            self.width(),
-            self.height()
-        );
-        println!("  img_w={}, img_h={}, ratio={}", img_w, img_h, ratio);
-        println!(
-            "  threshold_width={}, threshold_height={}",
-            threshold_width, threshold_height
-        );
-        println!(
-            "  panel_width_f64={}, panel_height_f64={}",
-            panel_width_f64, panel_height_f64
-        );
-        println!(
-            "  is_width_small={}, is_height_small={}",
-            is_width_small, is_height_small
-        );
-        println!("  Result: {}", is_width_small || is_height_small);
-
         is_width_small || is_height_small
     }
 
@@ -108,10 +85,14 @@ impl Panel {
     fn contains(&self, other: &Panel) -> bool {
         let self_rect = self.to_rect();
         let other_rect = other.to_rect();
-        self_rect.left() <= other_rect.left()
-            && self_rect.right() >= other_rect.right()
-            && self_rect.top() <= other_rect.top()
-            && self_rect.bottom() >= other_rect.bottom()
+
+        let wiggle_x = (other.width() as f32 * 0.3) as i32;
+        let wiggle_y = (other.height() as f32 * 0.3) as i32;
+
+        self_rect.left() <= other_rect.left() + wiggle_x
+            && self_rect.right() >= other_rect.right() - wiggle_x
+            && self_rect.top() <= other_rect.top() + wiggle_y
+            && self_rect.bottom() >= other_rect.bottom() - wiggle_y
     }
 
     fn overlap_panel(&self, other: &Panel) -> Option<Panel> {
@@ -138,6 +119,9 @@ impl Panel {
     }
 
     fn split(&self, n: u32) -> Option<Vec<Panel>> {
+        if n == 2 {
+            return None;
+        }
         if self.polygon.is_empty() {
             return None;
         }
@@ -413,7 +397,7 @@ fn process_image(img_path: &Path) -> Result<(), Box<dyn std::error::Error>> {
             }
         }
     }
-
+    // binary_img.save("output_panels/binary.png")?;
     let contours: Vec<Contour<u32>> = find_contours(&binary_img);
 
     let mut panels: Vec<Panel> = contours
@@ -421,7 +405,7 @@ fn process_image(img_path: &Path) -> Result<(), Box<dyn std::error::Error>> {
         .map(|c| {
             let points: Vec<Point> = c.points.iter().map(|p| Point { x: p.x, y: p.y }).collect();
             let arclength = calculate_polygon_perimeter(&points); // Calculate perimeter
-            let approximated_points = approximate_polygon(&points, 0.001 * arclength); // Use arclength for epsilon
+            let approximated_points = approximate_polygon(&points, 0.01 * arclength); // Use arclength for epsilon
             Panel::from_rect(
                 bounding_rect_from_points(&approximated_points),
                 approximated_points,
@@ -430,7 +414,38 @@ fn process_image(img_path: &Path) -> Result<(), Box<dyn std::error::Error>> {
         .filter(|p| !p.is_small(img_w, img_h, 1.0 / 15.0)) // Filter based on ratio
         .collect();
 
-    println!("Before grouping: {} panels", panels.len());
+    // Save contours image
+    let mut debug_img = img.to_rgb8();
+    for contour in &contours {
+        for pt in &contour.points {
+            if pt.x < debug_img.width() && pt.y < debug_img.height() {
+                debug_img.put_pixel(pt.x, pt.y, image::Rgb([255, 0, 0]));
+            }
+        }
+    }
+    // debug_img.save("output_panels/contours.png")?;
+
+    let mut debug_img = img.to_rgb8();
+    for contour in &panels {
+        for pt in &contour.polygon {
+            for dy in -1..=1 {
+                for dx in -1..=1 {
+                    let nx = pt.x as i32 + dx;
+                    let ny = pt.y as i32 + dy;
+                    if nx >= 0
+                        && ny >= 0
+                        && nx < debug_img.width() as i32
+                        && ny < debug_img.height() as i32
+                    {
+                        debug_img.put_pixel(nx as u32, ny as u32, image::Rgb([255, 0, 0]));
+                    }
+                }
+            }
+        }
+    }
+    // debug_img.save("output_panels/contourss.png")?;
+
+    // println!("Before grouping: {} panels", panels.len());
     let mut i = 0;
     let mut panels_to_add = Vec::new();
     let rr = 1.0 / 15.0;
@@ -480,7 +495,7 @@ fn process_image(img_path: &Path) -> Result<(), Box<dyn std::error::Error>> {
     // Add new merged panels at the end
     panels.append(&mut panels_to_add);
 
-    println!("After grouping: {} panels", panels.len());
+    // println!("After grouping: {} panels", panels.len());
 
     // println!("Before splitting: {} panels", panels.len());
     // Split panels
