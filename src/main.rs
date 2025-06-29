@@ -29,6 +29,14 @@ struct SerializablePanel {
     height: i32,
 }
 
+#[derive(Debug, Clone, Copy)]
+struct Gutters {
+    x: i32,
+    y: i32,
+    r: i32,
+    b: i32,
+}
+
 impl Panel {
     fn new(x: i32, y: i32, r: i32, b: i32, polygon: Vec<Point>) -> Self {
         Self {
@@ -74,6 +82,65 @@ impl Panel {
         is_width_small || is_height_small
     }
 
+    fn same_row(&self, other: &Panel) -> bool {
+        // Sort by y coordinate
+        let (above, below) = if self.y <= other.y {
+            (self, other)
+        } else {
+            (other, self)
+        };
+
+        // strictly above
+        if below.y > above.b {
+            return false;
+        }
+
+        // contained vertically
+        if below.b < above.b {
+            return true;
+        }
+
+        // intersect
+        let intersection_y = (above.b.min(below.b) - below.y) as f64;
+        let min_h = above.height().min(below.height()) as f64;
+
+        if min_h == 0.0 {
+            return true;
+        }
+
+        (intersection_y / min_h) >= (1.0 / 3.0)
+    }
+
+    fn find_neighbour_panel<'a>(
+        &self,
+        direction: &str,
+        panels: &'a [Panel],
+        _gutters: &Gutters, // gutters are unused here, but can be applied in expand_panels
+    ) -> Option<&'a Panel> {
+        match direction {
+            "x" => panels
+                .iter()
+                .filter(|p| p.r <= self.x) // to the left
+                .filter(|p| p.same_row(self))
+                .max_by_key(|p| p.r), // closest on left
+            "r" => panels
+                .iter()
+                .filter(|p| p.x >= self.r) // to the right
+                .filter(|p| p.same_row(self))
+                .min_by_key(|p| p.x), // closest on right
+            "y" => panels
+                .iter()
+                .filter(|p| p.b <= self.y) // above
+                .filter(|p| p.x <= self.r && p.r >= self.x) // horizontally overlapping
+                .max_by_key(|p| p.b), // closest above
+            "b" => panels
+                .iter()
+                .filter(|p| p.y >= self.b) // below
+                .filter(|p| p.x <= self.r && p.r >= self.x) // horizontally overlapping
+                .min_by_key(|p| p.y), // closest below
+            _ => None,
+        }
+    }
     fn merge(&self, other: &Panel) -> Panel {
         let x = self.x.min(other.x);
         let y = self.y.min(other.y);
@@ -366,6 +433,115 @@ fn calculate_polygon_perimeter(points: &[Point]) -> f64 {
     perimeter
 }
 
+// Add this new function to your code.
+fn resolve_overlaps(panels: &mut Vec<Panel>) {
+    // We loop enough times to ensure all overlaps have been resolved.
+    // For most comic layouts, a few passes are more than sufficient.
+    for _ in 0..1 {
+        let mut overlaps_found = false;
+        for i in 0..panels.len() {
+            for j in (i + 1)..panels.len() {
+                // We need to re-split the mutable borrow for each pair.
+                let (panels_left, panels_right) = panels.split_at_mut(j);
+                let p1 = &mut panels_left[i];
+                let p2 = &mut panels_right[0];
+
+                if let Some(overlap) = p1.overlap_panel(p2) {
+                    overlaps_found = true;
+                    // Decide if the overlap is primarily horizontal or vertical.
+                    if overlap.width() < overlap.height() {
+                        // Vertical overlap: Adjust the panels' y and b coordinates.
+                        let (top_panel, bottom_panel) =
+                            if p1.y < p2.y { (p1, p2) } else { (p2, p1) };
+                        let midpoint = top_panel.b + overlap.height() / 2;
+
+                        top_panel.b = midpoint;
+                        bottom_panel.y = midpoint;
+                    } else {
+                        // Horizontal overlap: Adjust the panels' x and r coordinates.
+                        let (left_panel, right_panel) =
+                            if p1.x < p2.x { (p1, p2) } else { (p2, p1) };
+                        let midpoint = left_panel.r + overlap.width() / 2;
+
+                        left_panel.r = midpoint;
+                        right_panel.x = midpoint;
+                    }
+                }
+            }
+        }
+        // If a full pass found no overlaps, we can stop early.
+        if !overlaps_found {
+            break;
+        }
+    }
+}
+
+fn expand_panels(panels: &mut Vec<Panel>, gutters: &Gutters) {
+    let directions = ["x", "y", "r", "b"];
+    // 1. Create a single, stable clone for reference. This prevents basing
+    //    calculations on partially updated data within the same pass.
+    let original_panels = panels.clone();
+
+    // 2. Iterate through the indices to get mutable access to the panels one by one.
+    for i in 0..panels.len() {
+        for &d in &directions {
+            // Find the neighbor based on the panel's original state.
+            let neighbour = original_panels[i].find_neighbour_panel(d, &original_panels, gutters);
+
+            let new_coord = if let Some(n) = neighbour {
+                // 3. CORRECTED GUTTER LOGIC:
+                //    Expand the panel's edge towards the neighbor's edge,
+                //    leaving the specified gutter space.
+                match d {
+                    "x" => n.r + gutters.x, // For left edge, move towards neighbor's right edge
+                    "r" => n.x - gutters.r, // For right edge, move towards neighbor's left edge
+                    "y" => n.b + gutters.y, // For top edge, move towards neighbor's bottom edge
+                    "b" => n.y - gutters.b, // For bottom edge, move towards neighbor's top edge
+                    _ => continue,
+                }
+            } else {
+                // No neighbor: expand to the outermost boundary of all panels.
+                // (This logic can be replaced with expanding to image boundary: 0, 0, img_w, img_h if needed)
+                match d {
+                    "x" => original_panels
+                        .iter()
+                        .map(|p| p.x)
+                        .min()
+                        .unwrap_or(panels[i].x),
+                    "y" => original_panels
+                        .iter()
+                        .map(|p| p.y)
+                        .min()
+                        .unwrap_or(panels[i].y),
+                    "r" => original_panels
+                        .iter()
+                        .map(|p| p.r)
+                        .max()
+                        .unwrap_or(panels[i].r),
+                    "b" => original_panels
+                        .iter()
+                        .map(|p| p.b)
+                        .max()
+                        .unwrap_or(panels[i].b),
+                    _ => continue,
+                }
+            };
+
+            // 4. Get a mutable reference to the panel we are actually updating.
+            let p = &mut panels[i];
+
+            // 5. Apply the new coordinate only if it's a valid expansion.
+            match d {
+                "x" if new_coord < p.x => p.x = new_coord,
+                "y" if new_coord < p.y => p.y = new_coord,
+                "r" if new_coord > p.r => p.r = new_coord,
+                "b" if new_coord > p.b => p.b = new_coord,
+                _ => {} // Do nothing if it's not an expansion
+            }
+        }
+    }
+}
+
 fn process_image(img_path: &Path) -> Result<(), Box<dyn std::error::Error>> {
     // println!("Processing image: {:?}", img_path);
 
@@ -542,6 +718,12 @@ fn process_image(img_path: &Path) -> Result<(), Box<dyn std::error::Error>> {
     }
     // println!("After merging contained: {} panels", panels.len());
 
+    let gutters = Gutters {
+        x: -2,
+        y: -2,
+        r: 2,
+        b: 2,
+    }; // example gutter of ±2px
     println!("Before de-overlapping: {} panels", panels.len());
     // De-overlap panels
     for i in 0..panels.len() {
@@ -567,16 +749,37 @@ fn process_image(img_path: &Path) -> Result<(), Box<dyn std::error::Error>> {
         }
     }
     println!("After de-overlapping: {} panels", panels.len());
+    panels.retain(|p| !p.is_small(img_w, img_h, 1.0 / 15.0));
+    expand_panels(&mut panels, &gutters);
 
-    // panels.retain(|p| !p.is_small(img_w, img_h, 1.0 / 15.0));
+    for i in 0..panels.len() {
+        for j in i + 1..panels.len() {
+            if let Some(overlap) = panels[i].overlap_panel(&panels[j]) {
+                if overlap.width() < overlap.height() && panels[i].r == overlap.r {
+                    // Vertical overlap, right aligned
+                    panels[i].r = overlap.x;
+                    panels[j].x = overlap.r;
+                    continue;
+                }
 
-    // panels.sort_by(|a, b| {
-    //     if (a.y - b.y).abs() < (a.height().min(b.height()) / 2) {
-    //         a.x.cmp(&b.x)
-    //     } else {
-    //         a.y.cmp(&b.y)
-    //     }
-    // });
+                if overlap.width() > overlap.height() && panels[i].b == overlap.b {
+                    // Horizontal overlap, bottom aligned
+                    panels[i].b = overlap.y;
+                    panels[j].y = overlap.b;
+                    continue;
+                }
+            }
+        }
+    }
+    // resolve_overlaps(&mut panels);
+
+    panels.sort_by(|a, b| {
+        if (a.y - b.y).abs() < (a.height().min(b.height()) / 2) {
+            a.x.cmp(&b.x)
+        } else {
+            a.y.cmp(&b.y)
+        }
+    });
 
     let serializable_panels: Vec<SerializablePanel> = panels
         .into_iter()
