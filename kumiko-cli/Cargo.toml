@@ -1,0 +1,8 @@
+[package]
+name = "kumiko-cli"
+version = "0.1.0"
+edition = "2021"
+
+[dependencies]
+libkumiko = { path = "../libkumiko" }
+clap = { version = "4.5.4", features = ["derive"] }
