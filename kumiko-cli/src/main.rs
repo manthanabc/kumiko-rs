@@ -3,8 +3,11 @@ use libkumiko::config::{Gutters, KumikoConfig, ReadingDirection};
 use libkumiko::process_path;
 
 use serde::Serialize;
+use std::fs;
 use std::path::PathBuf;
 use std::time::Instant;
+
+mod html_report;
 
 #[derive(Parser, Debug)]
 #[command(author, version, about, long_about = None)]
@@ -38,8 +41,16 @@ struct Args {
     rdp_epsilon: f64,
 
     /// Reading direction (ltr or rtl)
-    #[arg(long, default_value_t = ReadingDirectionArg::Ltr)]
+    #[arg(long, default_value = "ltr")]
     reading_direction: ReadingDirectionArg,
+
+    /// Generate HTML report
+    #[arg(long, short = 'b')] // Using -b for --html as per user's request
+    html: bool,
+
+    /// Open HTML report in browser (requires --html)
+    #[arg(long, requires = "html")]
+    open_browser: bool,
 }
 
 #[derive(clap::ValueEnum, Debug, Clone, Copy, PartialEq, Eq)]
@@ -64,12 +75,12 @@ impl From<ReadingDirectionArg> for ReadingDirection {
 }
 
 #[derive(Serialize, Debug)]
-struct OutputPanel {
-    x: i32,
-    y: i32,
-    width: i32,
-    height: i32,
-}
+struct OutputPanel(
+    i32,
+    i32,
+    i32,
+    i32,
+);
 
 #[derive(Serialize, Debug)]
 struct OutputEntry {
@@ -110,12 +121,7 @@ fn main() {
     for (filename, size, panels) in results {
         let output_panels: Vec<OutputPanel> = panels
             .into_iter()
-            .map(|p| OutputPanel {
-                x: p.x,
-                y: p.y,
-                width: p.width,
-                height: p.height,
-            })
+            .map(|p| OutputPanel(p.x, p.y, p.width, p.height))
             .collect();
 
         output_entries.push(OutputEntry {
@@ -128,11 +134,59 @@ fn main() {
         });
     }
 
-    match serde_json::to_string_pretty(&output_entries) {
-        Ok(json) => println!("{}", json),
-        Err(e) => {
-            eprintln!("❌ Error serializing JSON: {}", e);
+    if args.html {
+        let output_dir = PathBuf::from("kumiko_report");
+        if let Err(e) = fs::create_dir_all(&output_dir) {
+            eprintln!("❌ Error creating output directory: {}", e);
             std::process::exit(1);
+        }
+
+        let html_file_path = output_dir.join("report.html");
+        let mut html_content = String::new();
+
+        html_content.push_str(&html_report::header("Kumiko Panel Detection Report", "./"));
+
+        let json_data = serde_json::to_value(&output_entries).unwrap_or_else(|_| serde_json::json!([]));
+        html_content.push_str(&html_report::reader(&json_data, "./"));
+
+        html_content.push_str(&html_report::footer());
+
+        if let Err(e) = fs::write(&html_file_path, html_content) {
+            eprintln!("❌ Error writing HTML report: {}", e);
+            std::process::exit(1);
+        }
+
+        // Copy assets
+        let assets_dir = PathBuf::from("kumiko-cli/assets");
+        let js_files = ["jquery-3.2.1.min.js", "reader.js", "style.css"];
+
+        for file_name in &js_files {
+            let src_path = assets_dir.join(file_name);
+            let dest_path = output_dir.join(file_name);
+            if src_path.exists() {
+                if let Err(e) = fs::copy(&src_path, &dest_path) {
+                    eprintln!("❌ Error copying {}: {}", file_name, e);
+                    // Don't exit, just warn
+                }
+            } else {
+                eprintln!("⚠️ Warning: Asset file not found: {}", src_path.display());
+            }
+        }
+
+        println!("HTML report generated at: {}", html_file_path.display());
+
+        if args.open_browser {
+            if let Err(e) = opener::open(&html_file_path) {
+                eprintln!("❌ Error opening browser: {}", e);
+            }
+        }
+    } else {
+        match serde_json::to_string_pretty(&output_entries) {
+            Ok(json) => println!("{}", json),
+            Err(e) => {
+                eprintln!("❌ Error serializing JSON: {}", e);
+                std::process::exit(1);
+            }
         }
     }
 }

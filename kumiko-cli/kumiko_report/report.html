@@ -1,0 +1,38 @@
+<!DOCTYPE html>
+<html>
+
+<head>
+<title>Kumiko Reader</title>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<script type="text/javascript" src="./jquery-3.2.1.min.js"></script>
+<script type="text/javascript" src="./reader.js"></script>
+<link rel="stylesheet" media="all" href="./style.css" />
+<style type="text/css">
+h2, h3 { text-align: center; margin-top: 3em; }
+.sidebyside { display: flex; justify-content: space-around; }
+.sidebyside > div { width: 45%; }
+.version, .step-info { text-align: center; }
+.kumiko-reader.halfwidth { max-width: 45%; }
+.kumiko-reader.fullpage { width: 100%; height: 100%; }
+</style>
+</head>
+
+<body>
+<h1>Kumiko Panel Detection Report</h1>
+
+
+<div id="reader" class="kumiko-reader fullpage"></div>
+<script type="text/javascript">
+var reader = new Reader({
+container: $('#reader'),
+comicsJson: [{"filename":"0057.jpg","gutters":[2,2],"numbering":"ltr","panels":[[0,0,718,293],[0,700,718,436]],"processing_time":1.105069808,"size":[800,1138]}],
+images_dir: './',
+controls: true
+});
+reader.start();
+</script>
+
+
+</body>
+</html>
