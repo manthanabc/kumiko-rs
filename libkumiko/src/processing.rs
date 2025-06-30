@@ -1,4 +1,3 @@
-
 use crate::config::{Gutters, KumikoConfig, ReadingDirection};
 use crate::panel::{Panel, Point, SerializablePanel};
 use crate::utils::*;
@@ -96,11 +95,12 @@ fn expand_panels(panels: &mut Vec<Panel>, gutters: &Gutters) {
     }
 }
 
-pub fn find_panels(
-    img_path: &std::path::Path,
+use image::DynamicImage;
+
+pub fn find_panels_from_image(
+    img: DynamicImage,
     config: &KumikoConfig,
 ) -> Result<((u32, u32), Vec<SerializablePanel>), Box<dyn std::error::Error>> {
-    let img = image::open(img_path)?;
     let (img_w, img_h) = (img.width(), img.height());
     let gray_img = img.to_luma8();
 
@@ -136,8 +136,7 @@ pub fn find_panels(
         .map(|c| {
             let points: Vec<Point> = c.points.iter().map(|p| Point { x: p.x, y: p.y }).collect();
             let arclength = calculate_polygon_perimeter(&points); // Calculate perimeter
-            let approximated_points =
-                approximate_polygon(&points, config.rdp_epsilon * arclength); // Use arclength for epsilon
+            let approximated_points = approximate_polygon(&points, config.rdp_epsilon * arclength); // Use arclength for epsilon
             Panel::from_rect(
                 bounding_rect_from_points(&approximated_points),
                 approximated_points,
@@ -279,6 +278,7 @@ pub fn find_panels(
             }
         }
     }
+    panels.retain(|p| !p.is_small(img_w as i32, img_h as i32, config.small_panel_ratio));
 
     panels.sort_by(|a, b| {
         if (a.y - b.y).abs() < (a.height().min(b.height()) / 2) {

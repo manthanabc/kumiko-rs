@@ -1,4 +1,3 @@
-
 use crate::config::Gutters;
 use crate::utils::*;
 use imageproc::rect::Rect;
@@ -46,6 +45,9 @@ impl Panel {
             b: rect.bottom(),
             polygon,
         }
+    }
+    pub fn inner(&self) -> [i32; 4] {
+        [self.x, self.y, self.r, self.b]
     }
 
     pub fn width(&self) -> i32 {

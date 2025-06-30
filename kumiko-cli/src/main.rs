@@ -1,6 +1,6 @@
 use clap::Parser;
 use libkumiko::config::{Gutters, KumikoConfig, ReadingDirection};
-use libkumiko::process_path;
+use libkumiko::find_panels_from_bytes;
 
 use serde::Serialize;
 use std::fs;
@@ -75,12 +75,7 @@ impl From<ReadingDirectionArg> for ReadingDirection {
 }
 
 #[derive(Serialize, Debug)]
-struct OutputPanel(
-    i32,
-    i32,
-    i32,
-    i32,
-);
+struct OutputPanel(i32, i32, i32, i32);
 
 #[derive(Serialize, Debug)]
 struct OutputEntry {
@@ -108,31 +103,38 @@ fn main() {
     };
 
     let start_time = Instant::now();
-    let results = match process_path(&args.input_path, &config) {
-        Ok(r) => r,
+
+    let image_bytes = match fs::read(&args.input_path) {
+        Ok(bytes) => bytes,
         Err(e) => {
-            eprintln!("❌ Error: {}", e);
+            eprintln!("❌ Error reading image file: {}", e);
             std::process::exit(1);
         }
     };
 
-    let mut output_entries: Vec<OutputEntry> = Vec::new();
+    let (size, panels) = match libkumiko::find_panels_from_bytes(&image_bytes, &config) {
+        Ok(r) => r,
+        Err(e) => {
+            eprintln!("❌ Error processing image: {}", e);
+            std::process::exit(1);
+        }
+    };
 
-    for (filename, size, panels) in results {
-        let output_panels: Vec<OutputPanel> = panels
-            .into_iter()
-            .map(|p| OutputPanel(p.x, p.y, p.width, p.height))
-            .collect();
+    let output_panels: Vec<OutputPanel> = panels
+        .into_iter()
+        .map(|p| OutputPanel(p.x, p.y, p.width, p.height))
+        .collect();
 
-        output_entries.push(OutputEntry {
-            filename,
-            size,
-            numbering: format!("{:?}", args.reading_direction).to_lowercase(),
-            gutters: (config.gutters.x.abs(), config.gutters.y.abs()), // Assuming x and y gutters are symmetric
-            panels: output_panels,
-            processing_time: start_time.elapsed().as_secs_f64(),
-        });
-    }
+    let output_entry = OutputEntry {
+        filename: args.input_path.file_name().unwrap().to_string_lossy().to_string(),
+        size,
+        numbering: format!("{:?}", args.reading_direction).to_lowercase(),
+        gutters: (config.gutters.x.abs(), config.gutters.y.abs()), // Assuming x and y gutters are symmetric
+        panels: output_panels,
+        processing_time: start_time.elapsed().as_secs_f64(),
+    };
+
+    let output_entries = vec![output_entry];
 
     if args.html {
         let output_dir = PathBuf::from("kumiko_report");
@@ -141,12 +143,21 @@ fn main() {
             std::process::exit(1);
         }
 
+        // Copy the input image to the report directory
+        let image_filename = args.input_path.file_name().unwrap().to_str().unwrap();
+        let dest_image_path = output_dir.join(image_filename);
+        if let Err(e) = fs::copy(&args.input_path, &dest_image_path) {
+            eprintln!("❌ Error copying input image to report directory: {}", e);
+            std::process::exit(1);
+        }
+
         let html_file_path = output_dir.join("report.html");
         let mut html_content = String::new();
 
         html_content.push_str(&html_report::header("Kumiko Panel Detection Report", "./"));
 
-        let json_data = serde_json::to_value(&output_entries).unwrap_or_else(|_| serde_json::json!([]));
+        let json_data =
+            serde_json::to_value(&output_entries).unwrap_or_else(|_| serde_json::json!([]));
         html_content.push_str(&html_report::reader(&json_data, "./"));
 
         html_content.push_str(&html_report::footer());

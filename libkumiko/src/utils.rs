@@ -1,4 +1,3 @@
-
 use crate::panel::Point;
 use imageproc::rect::Rect;
 

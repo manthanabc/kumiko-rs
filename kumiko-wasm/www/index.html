@@ -1,0 +1,26 @@
+<!DOCTYPE html>
+<html>
+  <head>
+    <meta charset="utf-8">
+    <title>Kumiko WASM Panel Detector</title>
+    <link rel="stylesheet" href="style.css">
+  </head>
+  <body>
+    <h1>Kumiko WASM Panel Detector</h1>
+
+    <div class="controls">
+      <label for="imageUploadFiles">Upload Image(s):</label>
+      <input type="file" id="imageUploadFiles" accept="image/*" multiple>
+      <br><br>
+      <label for="imageUploadFolder">Upload Folder:</label>
+      <input type="file" id="imageUploadFolder" accept="image/*" webkitdirectory directory>
+    </div>
+
+    <div class="image-container">
+      <img id="mangaImage" src="" alt="Uploaded Manga Page">
+      <div id="panelsOverlay"></div>
+    </div>
+
+    <script type="module" src="./main.js"></script>
+  </body>
+</html>

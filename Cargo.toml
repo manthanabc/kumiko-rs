@@ -1,5 +1,6 @@
 [workspace]
 members = [
     "libkumiko",
-    "kumiko-cli"
+    "kumiko-cli",
+    "kumiko-wasm"
 ]

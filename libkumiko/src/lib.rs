@@ -5,51 +5,14 @@ pub mod utils;
 
 pub use config::KumikoConfig;
 pub use panel::SerializablePanel;
-pub use processing::find_panels;
+pub use processing::find_panels_from_image;
 
-use std::fs;
-use std::path::Path;
 
-pub fn process_path(
-    input_path: &Path,
+
+pub fn find_panels_from_bytes(
+    image_bytes: &[u8],
     config: &KumikoConfig,
-) -> Result<Vec<(String, (u32, u32), Vec<SerializablePanel>)>, Box<dyn std::error::Error>> {
-    let mut results = Vec::new();
-
-    if input_path.is_dir() {
-        for entry in fs::read_dir(input_path)? {
-            let entry = entry?;
-            let path = entry.path();
-            if path.is_file() {
-                if let Some(extension) = path.extension() {
-                    if let Some(ext_str) = extension.to_str().map(|s| s.to_lowercase()) {
-                        match ext_str.as_str() {
-                            "jpg" | "jpeg" | "png" => {
-                                let (size, panels) = find_panels(&path, config)?;
-                                results.push((
-                                    path.file_name().unwrap().to_str().unwrap().to_string(),
-                                    size,
-                                    panels,
-                                ));
-                            }
-                            _ => {}
-                        }
-                    }
-                }
-            }
-        }
-    } else if input_path.is_file() {
-        let (size, panels) = find_panels(input_path, config)?;
-        results.push((
-            input_path.file_name().unwrap().to_str().unwrap().to_string(),
-            size,
-            panels,
-        ));
-    } else {
-        return Err(From::from(format!(
-            "Invalid input path: {:?}",
-            input_path
-        )));
-    }
-    Ok(results)
+) -> Result<((u32, u32), Vec<SerializablePanel>), Box<dyn std::error::Error>> {
+    let img = image::load_from_memory(image_bytes)?;
+    processing::find_panels_from_image(img, config)
 }
