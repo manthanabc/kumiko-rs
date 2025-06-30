@@ -1,4 +1,3 @@
-
 #[derive(Debug, Clone, Copy)]
 pub struct Gutters {
     pub x: i32,
@@ -7,11 +6,18 @@ pub struct Gutters {
     pub b: i32,
 }
 
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub enum ReadingDirection {
+    Ltr,
+    Rtl,
+}
+
 #[derive(Debug, Clone, Copy)]
 pub struct KumikoConfig {
     pub gutters: Gutters,
     pub small_panel_ratio: f64,
     pub rdp_epsilon: f64,
+    pub reading_direction: ReadingDirection,
 }
 
 impl Default for KumikoConfig {
@@ -25,6 +31,7 @@ impl Default for KumikoConfig {
             },
             small_panel_ratio: 1.0 / 15.0,
             rdp_epsilon: 0.01,
+            reading_direction: ReadingDirection::Ltr,
         }
     }
 }

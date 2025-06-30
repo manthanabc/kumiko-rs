@@ -1,7 +1,10 @@
 use clap::Parser;
-use libkumiko::config::{Gutters, KumikoConfig};
+use libkumiko::config::{Gutters, KumikoConfig, ReadingDirection};
 use libkumiko::process_path;
+
+use serde::Serialize;
 use std::path::PathBuf;
+use std::time::Instant;
 
 #[derive(Parser, Debug)]
 #[command(author, version, about, long_about = None)]
@@ -33,6 +36,49 @@ struct Args {
     /// RDP epsilon
     #[arg(long, default_value_t = 0.01)]
     rdp_epsilon: f64,
+
+    /// Reading direction (ltr or rtl)
+    #[arg(long, default_value_t = ReadingDirectionArg::Ltr)]
+    reading_direction: ReadingDirectionArg,
+}
+
+#[derive(clap::ValueEnum, Debug, Clone, Copy, PartialEq, Eq)]
+enum ReadingDirectionArg {
+    Ltr,
+    Rtl,
+}
+
+impl std::fmt::Display for ReadingDirectionArg {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "{:?}", self)
+    }
+}
+
+impl From<ReadingDirectionArg> for ReadingDirection {
+    fn from(val: ReadingDirectionArg) -> Self {
+        match val {
+            ReadingDirectionArg::Ltr => ReadingDirection::Ltr,
+            ReadingDirectionArg::Rtl => ReadingDirection::Rtl,
+        }
+    }
+}
+
+#[derive(Serialize, Debug)]
+struct OutputPanel {
+    x: i32,
+    y: i32,
+    width: i32,
+    height: i32,
+}
+
+#[derive(Serialize, Debug)]
+struct OutputEntry {
+    filename: String,
+    size: (u32, u32),
+    numbering: String,
+    gutters: (i32, i32),
+    panels: Vec<OutputPanel>,
+    processing_time: f64,
 }
 
 fn main() {
@@ -47,10 +93,46 @@ fn main() {
         },
         small_panel_ratio: args.small_panel_ratio,
         rdp_epsilon: args.rdp_epsilon,
+        reading_direction: args.reading_direction.into(),
     };
 
-    if let Err(e) = process_path(&args.input_path, &config) {
-        eprintln!("❌ Error: {}", e);
-        std::process::exit(1);
+    let start_time = Instant::now();
+    let results = match process_path(&args.input_path, &config) {
+        Ok(r) => r,
+        Err(e) => {
+            eprintln!("❌ Error: {}", e);
+            std::process::exit(1);
+        }
+    };
+
+    let mut output_entries: Vec<OutputEntry> = Vec::new();
+
+    for (filename, size, panels) in results {
+        let output_panels: Vec<OutputPanel> = panels
+            .into_iter()
+            .map(|p| OutputPanel {
+                x: p.x,
+                y: p.y,
+                width: p.width,
+                height: p.height,
+            })
+            .collect();
+
+        output_entries.push(OutputEntry {
+            filename,
+            size,
+            numbering: format!("{:?}", args.reading_direction).to_lowercase(),
+            gutters: (config.gutters.x.abs(), config.gutters.y.abs()), // Assuming x and y gutters are symmetric
+            panels: output_panels,
+            processing_time: start_time.elapsed().as_secs_f64(),
+        });
+    }
+
+    match serde_json::to_string_pretty(&output_entries) {
+        Ok(json) => println!("{}", json),
+        Err(e) => {
+            eprintln!("❌ Error serializing JSON: {}", e);
+            std::process::exit(1);
+        }
     }
 }

@@ -1,5 +1,5 @@
 
-use crate::config::{Gutters, KumikoConfig};
+use crate::config::{Gutters, KumikoConfig, ReadingDirection};
 use crate::panel::{Panel, Point, SerializablePanel};
 use crate::utils::*;
 use image::{GrayImage, Luma};
@@ -99,9 +99,9 @@ fn expand_panels(panels: &mut Vec<Panel>, gutters: &Gutters) {
 pub fn find_panels(
     img_path: &std::path::Path,
     config: &KumikoConfig,
-) -> Result<Vec<SerializablePanel>, Box<dyn std::error::Error>> {
+) -> Result<((u32, u32), Vec<SerializablePanel>), Box<dyn std::error::Error>> {
     let img = image::open(img_path)?;
-    let (img_w, img_h) = (img.width() as i32, img.height() as i32);
+    let (img_w, img_h) = (img.width(), img.height());
     let gray_img = img.to_luma8();
 
     let bg_color = get_background_color(&gray_img);
@@ -143,7 +143,7 @@ pub fn find_panels(
                 approximated_points,
             )
         })
-        .filter(|p| !p.is_small(img_w, img_h, config.small_panel_ratio)) // Filter based on ratio
+        .filter(|p| !p.is_small(img_w as i32, img_h as i32, config.small_panel_ratio)) // Filter based on ratio
         .collect();
 
     let mut i = 0;
@@ -153,7 +153,7 @@ pub fn find_panels(
     while i < panels.len() {
         let p1 = &panels[i];
 
-        if !p1.is_small(img_w, img_h, config.small_panel_ratio) {
+        if !p1.is_small(img_w as i32, img_h as i32, config.small_panel_ratio) {
             i += 1;
             continue;
         }
@@ -164,7 +164,7 @@ pub fn find_panels(
         for j in (i + 1)..panels.len() {
             let p2 = &panels[j];
 
-            if j == i || !p2.is_small(img_w, img_h, config.small_panel_ratio) {
+            if j == i || !p2.is_small(img_w as i32, img_h as i32, config.small_panel_ratio) {
                 continue;
             }
 
@@ -178,7 +178,7 @@ pub fn find_panels(
             panels.remove(i);
             continue; // ← match Python: re-evaluate same index after shifting
         } else {
-            if !big_panel.is_small(img_w, img_h, config.small_panel_ratio) {
+            if !big_panel.is_small(img_w as i32, img_h as i32, config.small_panel_ratio) {
                 panels_to_add.push(big_panel);
             }
 
@@ -205,7 +205,7 @@ pub fn find_panels(
         }
     }
     panels = panels_to_split;
-    panels.retain(|p| !p.is_small(img_w, img_h, config.small_panel_ratio));
+    panels.retain(|p| !p.is_small(img_w as i32, img_h as i32, config.small_panel_ratio));
 
     let mut merged = true;
     while merged {
@@ -257,7 +257,7 @@ pub fn find_panels(
         }
     }
 
-    panels.retain(|p| !p.is_small(img_w, img_h, config.small_panel_ratio));
+    panels.retain(|p| !p.is_small(img_w as i32, img_h as i32, config.small_panel_ratio));
     expand_panels(&mut panels, &config.gutters);
 
     for i in 0..panels.len() {
@@ -282,8 +282,13 @@ pub fn find_panels(
 
     panels.sort_by(|a, b| {
         if (a.y - b.y).abs() < (a.height().min(b.height()) / 2) {
-            a.x.cmp(&b.x)
+            // Panels are on the same row, sort by x based on reading direction
+            match config.reading_direction {
+                ReadingDirection::Ltr => a.x.cmp(&b.x),
+                ReadingDirection::Rtl => b.x.cmp(&a.x),
+            }
         } else {
+            // Panels are on different rows, sort by y
             a.y.cmp(&b.y)
         }
     });
@@ -298,5 +303,5 @@ pub fn find_panels(
         })
         .collect();
 
-    Ok(serializable_panels)
+    Ok(((img_w, img_h), serializable_panels))
 }
