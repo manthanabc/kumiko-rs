@@ -12,9 +12,8 @@ mod html_report;
 #[derive(Parser, Debug)]
 #[command(author, version, about, long_about = None)]
 struct Args {
-    /// Path to the image or directory to process
     #[arg(required = true)]
-    input_path: PathBuf,
+    input_paths: Vec<PathBuf>,
 
     /// Gutter x size
     #[arg(long, default_value_t = -2)]
@@ -87,6 +86,20 @@ struct OutputEntry {
     processing_time: f64,
 }
 
+fn collect_image_files(dir: &PathBuf) -> Result<Vec<PathBuf>, std::io::Error> {
+    let mut files = Vec::new();
+    for entry in fs::read_dir(dir)? {
+        let entry = entry?;
+        let path = entry.path();
+        if path.is_dir() {
+            files.extend(collect_image_files(&path)?);
+        } else if path.is_file() {
+            files.push(path);
+        }
+    }
+    Ok(files)
+}
+
 fn main() {
     let args = Args::parse();
 
@@ -104,38 +117,75 @@ fn main() {
 
     let start_time = Instant::now();
 
-    let image_bytes = match fs::read(&args.input_path) {
-        Ok(bytes) => bytes,
-        Err(e) => {
-            eprintln!("❌ Error reading image file: {}", e);
-            std::process::exit(1);
+    let mut all_files = Vec::new();
+    for path in &args.input_paths {
+        if path.is_dir() {
+            match collect_image_files(path) {
+                Ok(files) => all_files.extend(files),
+                Err(e) => eprintln!("❌ Failed to read directory {}: {}", path.display(), e),
+            }
+        } else if path.is_file() {
+            all_files.push(path.clone());
+        } else {
+            eprintln!(
+                "⚠️ Warning: Path does not exist or is not file/dir: {}",
+                path.display()
+            );
         }
-    };
+    }
 
-    let (size, panels) = match libkumiko::find_panels_from_bytes(&image_bytes, &config) {
-        Ok(r) => r,
-        Err(e) => {
-            eprintln!("❌ Error processing image: {}", e);
-            std::process::exit(1);
-        }
-    };
+    if all_files.is_empty() {
+        eprintln!("❌ No valid image files found in input paths.");
+        std::process::exit(1);
+    }
 
-    let output_panels: Vec<OutputPanel> = panels
-        .into_iter()
-        .map(|p| OutputPanel(p.x, p.y, p.width, p.height))
-        .collect();
+    let mut output_entries: Vec<OutputEntry> = Vec::new(); // Initialize a vector to hold all output entries
 
-    let output_entry = OutputEntry {
-        filename: args.input_path.file_name().unwrap().to_string_lossy().to_string(),
-        size,
-        numbering: format!("{:?}", args.reading_direction).to_lowercase(),
-        gutters: (config.gutters.x.abs(), config.gutters.y.abs()), // Assuming x and y gutters are symmetric
-        panels: output_panels,
-        processing_time: start_time.elapsed().as_secs_f64(),
-    };
+    for image_path in all_files {
+        let image_bytes = match fs::read(&image_path) {
+            Ok(bytes) => bytes,
+            Err(e) => {
+                eprintln!(
+                    "❌ Error reading image file {}: {}",
+                    image_path.display(),
+                    e
+                );
+                continue; // Continue to the next image instead of exiting
+            }
+        };
 
-    let output_entries = vec![output_entry];
+        let (size, panels) = match libkumiko::find_panels_from_bytes(&image_bytes, &config) {
+            Ok(r) => r,
+            Err(e) => {
+                eprintln!("❌ Error processing image {}: {}", image_path.display(), e);
+                continue; // Continue to the next image instead of exiting
+            }
+        };
 
+        let output_panels: Vec<OutputPanel> = panels
+            .into_iter()
+            .map(|p| OutputPanel(p.x, p.y, p.width, p.height))
+            .collect();
+
+        // Calculate processing time for *this specific image*
+        let single_image_processing_time = start_time.elapsed().as_secs_f64();
+
+        let output_entry = OutputEntry {
+            filename: image_path
+                .file_name()
+                .unwrap_or_default()
+                .to_string_lossy()
+                .to_string(),
+            size,
+            numbering: format!("{:?}", args.reading_direction).to_lowercase(),
+            gutters: (config.gutters.x.abs(), config.gutters.y.abs()), // Assuming x and y gutters are symmetric
+            panels: output_panels,
+            processing_time: single_image_processing_time,
+        };
+        output_entries.push(output_entry); // Add the processed image's entry to the vector
+    }
+
+    // ---
     if args.html {
         let output_dir = PathBuf::from("kumiko_report");
         if let Err(e) = fs::create_dir_all(&output_dir) {
@@ -143,12 +193,38 @@ fn main() {
             std::process::exit(1);
         }
 
-        // Copy the input image to the report directory
-        let image_filename = args.input_path.file_name().unwrap().to_str().unwrap();
-        let dest_image_path = output_dir.join(image_filename);
-        if let Err(e) = fs::copy(&args.input_path, &dest_image_path) {
-            eprintln!("❌ Error copying input image to report directory: {}", e);
-            std::process::exit(1);
+        // Copy input images to the report directory
+        for entry in &output_entries {
+            let original_image_path = args
+                .input_paths
+                .iter()
+                .find(|p| {
+                    p.file_name()
+                        .map_or(false, |f| f.to_str().unwrap() == entry.filename)
+                })
+                .map_or_else(
+                    || PathBuf::from(&entry.filename), // Fallback if original path not found
+                    |p| p.to_path_buf(),
+                );
+
+            let dest_image_path = output_dir.join(&entry.filename);
+
+            // Only copy if the source path actually exists
+            if original_image_path.exists() {
+                if let Err(e) = fs::copy(&original_image_path, &dest_image_path) {
+                    eprintln!(
+                        "❌ Error copying input image {} to report directory: {}",
+                        original_image_path.display(),
+                        e
+                    );
+                    // Don't exit, just warn
+                }
+            } else {
+                eprintln!(
+                    "⚠️ Warning: Original image file not found for copying: {}",
+                    original_image_path.display()
+                );
+            }
         }
 
         let html_file_path = output_dir.join("report.html");
@@ -168,7 +244,7 @@ fn main() {
         }
 
         // Copy assets
-        let assets_dir = PathBuf::from("kumiko-cli/assets");
+        let assets_dir = PathBuf::from("kumiko-cli/assets"); // Adjust this path if different
         let js_files = ["jquery-3.2.1.min.js", "reader.js", "style.css"];
 
         for file_name in &js_files {

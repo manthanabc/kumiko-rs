@@ -2,11 +2,11 @@
 <html>
   <head>
     <meta charset="utf-8">
-    <title>Kumiko WASM Panel Detector</title>
+    <title>Kumiko WASM Reader</title>
     <link rel="stylesheet" href="style.css">
   </head>
   <body>
-    <h1>Kumiko WASM Panel Detector</h1>
+    <h1>Kumiko WASM Reader</h1>
 
     <div class="controls">
       <label for="imageUploadFiles">Upload Image(s):</label>
@@ -14,13 +14,14 @@
       <br><br>
       <label for="imageUploadFolder">Upload Folder:</label>
       <input type="file" id="imageUploadFolder" accept="image/*" webkitdirectory directory>
+      <br><br>
+      <button id="loadExample">Load Example</button>
     </div>
 
-    <div class="image-container">
-      <img id="mangaImage" src="" alt="Uploaded Manga Page">
-      <div id="panelsOverlay"></div>
-    </div>
+    <div id="kumiko-reader" class="kumiko-reader"></div>
 
+    <script src="./jquery-3.2.1.min.js"></script>
+    <script src="./reader.js"></script>
     <script type="module" src="./main.js"></script>
   </body>
 </html>
