@@ -41,8 +41,8 @@ class Reader {
 		});
 		this.gui.append(this.container);
 		
-		if (options['controls'])
-			this.add_controls();
+		// if (options['controls'])
+		// 	this.add_controls();
 		
 		window.addEventListener('orientationchange', function () {
 			setTimeout( function () { this.gotoPanel(this.currpanel); }.bind(this), 500);  // slight delay to make it work better, not sure why :)
@@ -116,10 +116,15 @@ class Reader {
 		$('.pagenb',this.gui).html('page '+(page+1)+' <small>/'+this.comic.length+'</small>')
 		
 		var imginfo = this.comic[page];
+		var rati = imginfo.size[0]/imginfo.size[1];
+		var wdt = 400;
+		var hei = wdt/rati;
+		imginfo.height = hei;
+		imginfo.width = wdt;
 		if (!this.gui.hasClass('fullpage'))
 			this.gui.css({
-				width: imginfo.size[0],
-				height: imginfo.size[1],
+				width:wdt,
+				height: hei,
 				padding: '2em',
 			});
 		var imgurl = this.images_dir == 'urls' ? imginfo.filename : this.images_dir + imginfo.filename.split('/').reverse()[0];
@@ -149,13 +154,17 @@ class Reader {
 		this.drawPanels(imginfo);
 		this.dezoom();
 		
-		if (this.currpanel == 'last')
-			this.currpanel = $('.panel').length-1;
-		else
-			this.currpanel = 0;
-		
-		if (was_zoomed)
+		// TODO: make single image flow correct
+		if (imginfo.panels && Object.keys(imginfo.panels).length > 0) {
+			if (this.currpanel == 'last') {
+				this.currpanel = $('.panel').length-1;
+			} else {
+				this.currpanel = 0;
+			}
 			this.gotoPanel(this.currpanel);
+		} else {
+			this.currpanel = 0;
+		}
 		
 		return true;
 	}
@@ -302,13 +311,12 @@ class Reader {
 		
 		var menu = $('<div class="menu"/>');
 		var menuul = $('<ul/>');
-		menuul.append('<li><label><input type="radio" name="viewmode" value="page"  autocomplete="off" />Page</label></li>');
 		menuul.append('<li><label><input type="radio" name="viewmode" value="panel" autocomplete="off" />Panel</label></li>');
 		menu.append(menuul);
 		
-		var btn_debug = $('<label><input type="checkbox" class="toggleDebug" autocomplete="off" />Show panels</label>');
 		if (this.debug)
 			btn_debug.children('.toggleDebug').prop('checked',true);
+
 		btn_debug.children('.toggleDebug').on('change', function () {
 			_reader.gui.toggleClass('debug');
 			_reader.setHashInfo({'debug': _reader.gui.hasClass('debug') ? '' : null});
@@ -332,7 +340,7 @@ class Reader {
 		this.showMenu(false);
 		
 		$(document).ready( function () {
-			var mode = _reader.debug ? 'page' : 'panel';
+			var mode = 'panel';
 			$('input[name=viewmode][value='+mode+']',  _reader.gui).prop('checked',true).change();
 		});
 	}
@@ -383,10 +391,6 @@ class Reader {
         case 40: // down
           this.next();
           break;
-        case 68: // 'd' debug (show panels)
-          const d = $('input.toggleDebug');
-          d.prop('checked', !d.is(':checked')).change();
-          break;
         case 77: // 'm' key: toggle menu
           this.showMenu('toggle');
           break;
@@ -409,13 +413,12 @@ $(document).delegate( 'input[name=viewmode]', 'change', function () {
 	
 	var reader = $(this).parents('.kumiko-reader:eq(0)').data('reader');
 	switch ($(this).val()) {
-		case 'page':
-			reader.dezoom();
-			break;
 		case 'panel':
 			reader.gotoPanel(0);
 			break;
 	}
+	reader.container.css({
+	});
 	reader.container.focus();
 });
 

@@ -2,26 +2,142 @@
 <html>
   <head>
     <meta charset="utf-8">
-    <title>Kumiko WASM Reader</title>
+    <title>LibReader</title>
     <link rel="stylesheet" href="style.css">
   </head>
   <body>
-    <h1>Kumiko WASM Reader</h1>
 
-    <div class="controls">
-      <label for="imageUploadFiles">Upload Image(s):</label>
-      <input type="file" id="imageUploadFiles" accept="image/*" multiple>
-      <br><br>
-      <label for="imageUploadFolder">Upload Folder:</label>
-      <input type="file" id="imageUploadFolder" accept="image/*" webkitdirectory directory>
-      <br><br>
-      <button id="loadExample">Load Example</button>
+  <div class="container">
+    <div class="left">
+      <h1>LibReader</h1>
+
+      <p>
+        <strong>LibReader</strong> is an experimental manga reader written in Rust, leveraging WebAssembly (WASM) to deliver a smooth, high-performance reading experience — entirely within the browser and without the need for any backend processing.
+        <br>It is powered by a modified version of 
+        <a href="https://github.com/njean42/kumiko" target="_blank">kumiko</a>, 
+        optimized to run in-browser with near-zero latency, achieving performance improvements of approximately <b>20× faster</b> than the original implementation, while running inside browser!.
+      </p>
+
+      <div class="controls">
+        <h2>Controls</h2>
+
+        <div class="upload-group">
+          <label for="imageUploadFiles">Upload Image(s):</label>
+          <input type="file" id="imageUploadFiles" accept="image/*" multiple>
+        </div>
+
+        <div class="upload-group">
+          <label for="imageUploadFolder">Upload Folder:</label>
+          <input type="file" id="imageUploadFolder" accept="image/*" webkitdirectory directory>
+        </div>
+
+        <button id="loadExample">📂 Load Example</button>
+
+        <div class="help-text">
+          <p>⬅ Press Left Arrow: Previous Panel</p>
+          <p>➡ Press Right Arrow: Next Panel</p>
+          <p>🖱 Click on Image: Move to Next Panel</p>
+        </div>
+      </div>
+
+      <p>
+        <h3> Note </h3>
+        This demo showcases the potential of using image processing directly inside browser,
+        however this version has servere issues and inaccuracies, the next version should provide a much more robust splitting on much
+        more diverse range of mangas. 
+      </p>
     </div>
 
-    <div id="kumiko-reader" class="kumiko-reader"></div>
+    <div class="right">
+      <div id="kumiko-reader" class="kumiko-reader"></div>
+    </div>
+  </div>
+
+  <style>
+    body, html {
+      margin: 0;
+      padding: 0;
+      height: 100%;
+      font-family: sans-serif;
+    }
+
+    .container {
+      display: flex;
+      height: 100vh;
+    }
+
+    .left, .right {
+      width: 50%;
+      padding: 20px;
+      box-sizing: border-box;
+      overflow-y: auto;
+    }
+
+    .kumiko-reader {
+      width: 100%;
+      height: 100%;
+      border: 1px solid #ccc;
+      background-color: #f9f9f9;
+    }
+  </style>
 
     <script src="./jquery-3.2.1.min.js"></script>
     <script src="./reader.js"></script>
     <script type="module" src="./main.js"></script>
+
+
+    <style>
+.controls {
+  background: #f4f4f4;
+  padding: 20px;
+  border-radius: 12px;
+  box-shadow: 0 2px 10px rgba(0,0,0,0.05);
+  max-width: 400px;
+}
+
+.controls h2 {
+  margin-top: 0;
+  font-size: 1.4em;
+  margin-bottom: 16px;
+}
+
+.upload-group {
+  margin-bottom: 16px;
+}
+
+.upload-group label {
+  display: block;
+  margin-bottom: 6px;
+  font-weight: 600;
+}
+
+.upload-group input[type="file"] {
+  display: block;
+  width: 100%;
+}
+
+.controls button {
+  padding: 10px 15px;
+  font-size: 1em;
+  background-color: #007bff;
+  color: white;
+  border: none;
+  border-radius: 6px;
+  cursor: pointer;
+  margin-bottom: 20px;
+}
+
+.controls button:hover {
+  background-color: #0056b3;
+}
+
+.help-text {
+  font-size: 0.9em;
+  color: #555;
+  border-top: 1px solid #ddd;
+  padding-top: 10px;
+}
+
+    </style>
   </body>
 </html>

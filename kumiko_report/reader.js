@@ -1,6 +1,3 @@
-
-
-
 class Reader {
 	
 	constructor(options)
@@ -117,6 +114,10 @@ class Reader {
 		$('.pagenb',this.gui).html('page '+(page+1)+' <small>/'+this.comic.length+'</small>')
 		
 		var imginfo = this.comic[page];
+
+		// TODO: Change width to 800px and make height based on aspect ratio
+		// Make sure script understands the and height new
+		imginfo.width = 
 		if (!this.gui.hasClass('fullpage'))
 			this.gui.css({
 				width: imginfo.size[0],
